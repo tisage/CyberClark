@@ -1,0 +1,19 @@
+# Ignore Mac system files
+.DS_store
+
+# Ignore folder
+__pycache__
+.venv
+.pytest_cache
+.benchmarks
+.obsidian
+rag
+wandb
+tianyuelite
+
+# Ignore key files
+.env
+
+# Ignore .vscode folder
+.code-workspace
+01_learn_from_book_joe.ipynb

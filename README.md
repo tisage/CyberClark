@@ -9,7 +9,7 @@ A multi-agent system to study cybersecurity course with Clark library.
 
 ## Installation
 ```bash
-pip install python-dotenv langchain langchain_community langgraph langchain-openai faiss-cpu
+pip install python-dotenv langchain langchain_community langgraph langchain-openai faiss-cpu pypdf neo4j
 ```
 
 

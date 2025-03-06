@@ -13,7 +13,7 @@ pip install python-dotenv langchain langchain_community langgraph langchain-open
 ```
 ## Graph DB Neo4j
 ```
-docker run --name neo4j -p 7000:7474 -p 7001:7687 -d -e NEO4J_AUTH=neo4j/password -e NEO4J_PLUGINS='["apoc"]'  neo4j:latest
+docker run --name neo4j -p 7474:7474 -p 7687:7687 -d -e NEO4J_AUTH=neo4j/password -e NEO4J_PLUGINS='["apoc"]'  neo4j:latest
 ```
 
 Since Feb. 2025

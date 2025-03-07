@@ -1,7 +1,6 @@
-# Load environment variables
+# agents.py
 import os
-import uuid
-from typing import Annotated, Dict, List, Literal, Sequence
+from typing import Annotated, Dict, Literal, Sequence
 
 from dotenv import load_dotenv
 from langchain_community.tools.tavily_search import TavilySearchResults
@@ -15,8 +14,7 @@ from langgraph.types import Command
 from pydantic import BaseModel
 from typing_extensions import TypedDict
 
-from vector_store import (clark_retriever_tool,  # Import both tools
-                          exercise_retriever_tool)
+from vector_store import clark_retriever_tool, exercise_retriever_tool
 
 load_dotenv()
 OPENAI_API_KEY = os.environ['OPENAI_API_KEY']
@@ -25,11 +23,11 @@ TAVILY_API_KEY = os.environ['TAVILY_API_KEY']
 # Initialize LLM
 llm = ChatOpenAI(model_name="gpt-4o-mini", temperature=0.8)
 
-# Define available agents (added 'exercise')
+# Define available agents
 members = ["general_conversation", "web_researcher", "rag", "exercise"]
 options = members + ["FINISH"]
 
-# Updated Supervisor system prompt
+# Supervisor system prompt
 system_prompt = """
 You are a supervisor managing a conversation between a user and AI agents: a general conversation agent, a RAG agent, a web researcher agent, and an exercise agent.
 
@@ -57,9 +55,9 @@ Respond with a JSON object containing the key 'next' and the value being one of:
 """
 
 class Router(TypedDict):
-    next: Literal["general_conversation", "rag", "exercise", "web_researcher", "FINISH"]
+    next: Literal["general_conversation", "rag", "web_researcher", "exercise", "FINISH"]
 
-def supervisor_node(state: MessagesState) -> Command[Literal["general_conversation", "rag",  "exercise", "web_researcher", "__end__"]]:
+def supervisor_node(state: MessagesState) -> Command[Literal["general_conversation", "rag", "web_researcher", "exercise", "__end__"]]:
     messages = [{"role": "system", "content": system_prompt}] + state["messages"]
     response = llm.with_structured_output(Router).invoke(messages)
     goto = response["next"]
@@ -72,8 +70,9 @@ def supervisor_node(state: MessagesState) -> Command[Literal["general_conversati
 class AgentState(TypedDict):
     messages: Annotated[Sequence[BaseMessage], add_messages]
 
-# Function to create an agent (unchanged)
+# Function to create an agent
 def create_agent(llm, tools, system_prompt: str = ""):
+    """Create an agent with the specified LLM, tools, and system prompt."""
     llm_with_tools = llm.bind_tools(tools)
     def chatbot(state: AgentState):
         messages = (
@@ -91,7 +90,7 @@ def create_agent(llm, tools, system_prompt: str = ""):
     graph_builder.set_entry_point("agent")
     return graph_builder.compile()
 
-# General Conversation Agent (unchanged)
+# General Conversation Agent
 general_conversation_system_prompt = """
 You are a friendly cybersecurity teaching assistant named CyberGuide. Your primary goal is to help students learn about cybersecurity concepts.
 
@@ -114,7 +113,7 @@ def general_conversation_node(state: MessagesState) -> Command[Literal["supervis
         goto="supervisor",
     )
 
-# Web Researcher Agent (unchanged)
+# Web Researcher Agent
 web_search_tool = TavilySearchResults(max_results=2)
 web_researcher_system_prompt = """
 You are an AI assistant tasked with searching the internet for information to answer the user's query about cybersecurity.
@@ -130,7 +129,7 @@ def web_research_node(state: MessagesState) -> Command[Literal["supervisor"]]:
         goto="supervisor",
     )
 
-# Updated RAG Agent with exercise suggestion
+# RAG Agent
 rag_system_prompt = """
 You are CyberGuide, an AI assistant tasked with retrieving and presenting cybersecurity educational resources from the CLARK library.
 
@@ -157,7 +156,7 @@ def rag_node(state: MessagesState) -> Command[Literal["supervisor"]]:
         goto="supervisor",
     )
 
-# New Exercise Agent
+# Exercise Agent
 exercise_system_prompt = """
 You are CyberGuide, an AI assistant tasked with providing cybersecurity exercises or generating questions for students.
 
@@ -179,115 +178,27 @@ def exercise_node(state: MessagesState) -> Command[Literal["supervisor"]]:
         goto="supervisor",
     )
 
-# Build the graph with the new exercise node (unchanged from previous)
-builder = StateGraph(MessagesState)
-builder.add_edge(START, "supervisor")
-builder.add_node("supervisor", supervisor_node)
-builder.add_node("general_conversation", general_conversation_node)
-builder.add_node("web_researcher", web_research_node)
-builder.add_node("rag", rag_node)
-builder.add_node("exercise", exercise_node)
+# Build and compile the graph
+def build_graph():
+    builder = StateGraph(MessagesState)
+    builder.add_edge(START, "supervisor")
+    builder.add_node("supervisor", supervisor_node)
+    builder.add_node("general_conversation", general_conversation_node)
+    builder.add_node("web_researcher", web_research_node)
+    builder.add_node("rag", rag_node)
+    builder.add_node("exercise", exercise_node)
 
-# Add memory to persist conversation state
-memory = MemorySaver()
-graph = builder.compile(checkpointer=memory)
+    # Add memory to persist conversation state
+    memory = MemorySaver()
+    graph = builder.compile(checkpointer=memory)
 
-# Save graph visualization to a file (unchanged)
-try:
-    graph_image = graph.get_graph().draw_mermaid_png()
-    with open("graph.png", "wb") as f:
-        f.write(graph_image)
-    print("Graph saved as 'graph.png' in the current directory.")
-except Exception as e:
-    print(f"Error saving graph: {e}")
+    # Save graph visualization (optional, can be commented out if not needed)
+    try:
+        graph_image = graph.get_graph().draw_mermaid_png()
+        with open("graph.png", "wb") as f:
+            f.write(graph_image)
+        print("Graph saved as 'graph.png' in the current directory.")
+    except Exception as e:
+        print(f"Error saving graph: {e}")
 
-def chat_with_graph(graph, thread_id: str = None) -> Dict[str, str]:
-    """
-    Run an interactive chatbot session with the LangGraph workflow, handling multiple questions.
-
-    Args:
-        graph: The compiled LangGraph instance.
-        thread_id: A unique identifier for the conversation thread. If None, a new UUID is generated.
-
-    Returns:
-        Dict containing the final conversation state (last query, final answer, and all steps).
-    """
-    # Generate a new session ID if none provided
-    if thread_id is None:
-        thread_id = str(uuid.uuid4())  # e.g., "550e8400-e29b-41d4-a716-446655440000"
-    
-    # Initialize persistent state with the thread_id for the checkpointer
-    config = {"configurable": {"thread_id": thread_id}}
-    state = {"messages": []}
-    
-    # Result dictionary to store conversation summary
-    result_info = {
-        "last_query": "",
-        "final_answer": "",
-        "steps": [],
-        "session_id": thread_id  # Include session ID in the result
-    }
-
-    # Print welcome message with session ID
-    print(f"{'='*50}\nWelcome to the Cybersecurity Chatbot!\nSession ID: {thread_id}\nType your question or 'exit' to quit.\n{'='*50}")
-
-    while True:
-        # Get user input
-        query = input("You: ").strip()
-        
-        # Check for exit condition
-        if query.lower() in ["exit", "quit"]:
-            print(f"{'='*50}\nChat session ended.\nSession ID: {thread_id}\n{'='*50}")
-            break
-
-        # Update state with new user message
-        state["messages"].append(HumanMessage(content=query))
-        result_info["last_query"] = query
-
-        # Print query header
-        print(f"{'='*50}\nProcessing Query: '{query}'\n{'='*50}")
-
-        # Execute the graph with the current state and config
-        result = graph.invoke(state, config=config)
-        messages = result["messages"]
-
-        # Process each new message since the last turn
-        for msg in messages[len(state["messages"]) - 1:]:
-            sender = msg.name if hasattr(msg, "name") and msg.name else ("User" if isinstance(msg, HumanMessage) else "Unknown")
-            formatted_msg = f"{sender}: {msg.content}"
-
-            # Determine step type
-            if sender == "supervisor":
-                step_info = f"Supervisor: Routing decision based on prior message"
-            elif hasattr(msg, "tool_calls") and msg.tool_calls:
-                tool_name = msg.tool_calls[0]["name"] if msg.tool_calls else "Unknown Tool"
-                step_info = f"Agent: {sender}\nTool: {tool_name}\nOutput: {msg.content}"
-            elif sender not in ["User", "supervisor"]:
-                step_info = f"Agent: {sender}\nOutput: {msg.content}"
-            else:
-                step_info = formatted_msg
-
-            # Log step
-            print(step_info)
-            print("-" * 50)
-            result_info["steps"].append(step_info)
-
-        # Extract final answer for this turn
-        final_answer = next(
-            (msg.content for msg in reversed(messages) if hasattr(msg, "name") and msg.name and msg.name not in ["supervisor", None]),
-            "No answer provided."
-        )
-        result_info["final_answer"] = final_answer
-
-        # Print final answer for this turn
-        print(f"{'='*50}\nFinal Answer to You:\n{'-'*20}\n{final_answer}\n{'='*50}")
-
-        # Update state for the next iteration
-        state = result
-
-    return result_info
-
-if __name__ == "__main__":
-    # Run the chat without specifying a thread_id to generate a new one
-    result = chat_with_graph(graph)
-    print(f"Session completed. Session ID was: {result['session_id']}")
+    return graph

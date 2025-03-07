@@ -13,6 +13,8 @@ from langgraph.prebuilt import ToolNode, tools_condition
 from langgraph.types import Command
 from pydantic import BaseModel
 from typing_extensions import TypedDict
+from typing import Literal
+
 
 from vector_store import clark_retriever_tool
 
@@ -37,24 +39,25 @@ You are a supervisor managing a conversation between a user and AI agents: a gen
 
 Your task is to route the conversation to the appropriate agent or to finish the conversation based on the following rules:
 
-1. For a new user query:
+1. For any user query:
    - If it's small talk, a greeting, or a casual conversation, route to 'general_conversation'.
    - If it's a cybersecurity question, route to 'rag' to search the CLARK library.
 
-2. After the 'general_conversation' agent responds:
-   - If the conversation should continue as general discussion, route to 'FINISH'.
-   - If the user asks a cybersecurity question, route to 'rag'.
+2. For any follow-up after an agent response:
+   - Always evaluate the new user query independently.
+   - If it's a new topic or follow-up question that's general conversation, route to 'general_conversation'.
+   - If it's a cybersecurity question (new or follow-up), route to 'rag'.
+   - The conversation can freely move between agents as needed.
 
 3. After the 'rag' agent responds:
-   - If the response adequately answers the user's query using CLARK resources, route to 'FINISH'.
    - If the response indicates that no relevant information was found in the CLARK library or does not adequately answer the query, route to 'web_researcher' agent.
+   - Otherwise, route to 'FINISH'.
 
 4. After the 'web_researcher' agent responds, route to 'FINISH'.
 
-To make this decision, consider:
-- Is the user's message small talk or a casual greeting?
-- Is the user asking about a specific cybersecurity topic?
-- Did the previous agent provide a satisfactory response?
+5. After the 'general_conversation' agent responds, route to 'FINISH'.
+
+Your routing should be flexible based on each new user message, not bound by a predetermined sequence.
 
 Respond with a JSON object containing the key 'next' and the value being one of: 'general_conversation', 'rag', 'web_researcher', or 'FINISH'. For example: {"next": "general_conversation"}
 """
@@ -148,6 +151,8 @@ In your response:
 4. If the content is complex, provide additional explanations to make it more accessible
 
 Always maintain a helpful, encouraging tone to support students in their cybersecurity learning journey.
+
+If you cannot find relevant information in the CLARK library, clearly state this so the supervisor can route to the web researcher agent.
 """
 rag_agent = create_agent(llm, [clark_retriever_tool], rag_system_prompt)
 
@@ -158,13 +163,16 @@ def rag_node(state: MessagesState) -> Command[Literal["supervisor"]]:
         goto="supervisor",
     )
 
-# Build the graph
+# Build the graph with a simplified structure
 builder = StateGraph(MessagesState)
 builder.add_edge(START, "supervisor")
 builder.add_node("supervisor", supervisor_node)
 builder.add_node("general_conversation", general_conversation_node)
 builder.add_node("web_researcher", web_research_node)
 builder.add_node("rag", rag_node)
+
+# No need for explicit edges back to supervisor - they're handled by the Command(goto="supervisor") 
+# in each agent node's function
 
 # Add memory to persist conversation state
 memory = MemorySaver()

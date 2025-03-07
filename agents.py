@@ -1,5 +1,6 @@
 # Load environment variables
 import os
+import uuid
 from typing import Annotated, Dict, List, Literal, Sequence
 
 from dotenv import load_dotenv
@@ -13,10 +14,9 @@ from langgraph.prebuilt import ToolNode, tools_condition
 from langgraph.types import Command
 from pydantic import BaseModel
 from typing_extensions import TypedDict
-from typing import Literal
 
-
-from vector_store import clark_retriever_tool
+from vector_store import (clark_retriever_tool,  # Import both tools
+                          exercise_retriever_tool)
 
 load_dotenv()
 OPENAI_API_KEY = os.environ['OPENAI_API_KEY']
@@ -25,38 +25,41 @@ TAVILY_API_KEY = os.environ['TAVILY_API_KEY']
 # Initialize LLM
 llm = ChatOpenAI(model_name="gpt-4o-mini", temperature=0.8)
 
-# Define available agents
-members = ["general_conversation", "web_researcher", "rag"]
+# Define available agents (added 'exercise')
+members = ["general_conversation", "web_researcher", "rag", "exercise"]
 options = members + ["FINISH"]
 
-# Supervisor system prompt
+# Updated Supervisor system prompt
 system_prompt = """
-You are a supervisor managing a conversation between a user and AI agents: a general conversation agent, a RAG agent, and a web researcher agent.
+You are a supervisor managing a conversation between a user and AI agents: a general conversation agent, a RAG agent, a web researcher agent, and an exercise agent.
 
 - The general conversation agent handles small talk and guides users toward cybersecurity topics.
-- The RAG agent searches through the CLARK library, a compilation of high-value cybersecurity curriculum.
+- The RAG agent searches through the CLARK library for cybersecurity information.
 - The web researcher agent searches the internet for additional information.
+- The exercise agent provides exercises or generates questions for students to practice cybersecurity topics.
 
 Your task is to route the conversation to the appropriate agent or to finish the conversation based on the following rules:
 
 1. For any user query:
    - If it's small talk, a greeting, or a casual conversation, route to 'general_conversation'.
    - If it's a cybersecurity question, route to 'rag' to search the CLARK library.
-   - if it's a question cannot be answered by the other agent, route to 'web_researcher'.
+   - If it's a request for exercises or practice questions on a cybersecurity topic, route to 'exercise'.
+   - If it's a question that cannot be answered by the other agents, route to 'web_researcher'.
    - The conversation can freely move between agents as needed.
 2. After the 'general_conversation' agent responds, route to 'FINISH'.
 3. After the 'rag' agent responds, route to 'FINISH'.
 4. After the 'web_researcher' agent responds, route to 'FINISH'.
+5. After the 'exercise' agent responds, route to 'FINISH'.
 
 Your routing should be flexible based on each new user message, not bound by a predetermined sequence.
 
-Respond with a JSON object containing the key 'next' and the value being one of: 'general_conversation', 'rag', 'web_researcher', or 'FINISH'. For example: {"next": "general_conversation"}
+Respond with a JSON object containing the key 'next' and the value being one of: 'general_conversation', 'rag', 'web_researcher', 'exercise', or 'FINISH'. For example: {"next": "exercise"}
 """
 
 class Router(TypedDict):
-    next: Literal["general_conversation", "rag", "web_researcher", "FINISH"]
+    next: Literal["general_conversation", "rag", "exercise", "web_researcher", "FINISH"]
 
-def supervisor_node(state: MessagesState) -> Command[Literal["general_conversation", "rag", "web_researcher", "__end__"]]:
+def supervisor_node(state: MessagesState) -> Command[Literal["general_conversation", "rag",  "exercise", "web_researcher", "__end__"]]:
     messages = [{"role": "system", "content": system_prompt}] + state["messages"]
     response = llm.with_structured_output(Router).invoke(messages)
     goto = response["next"]
@@ -69,9 +72,8 @@ def supervisor_node(state: MessagesState) -> Command[Literal["general_conversati
 class AgentState(TypedDict):
     messages: Annotated[Sequence[BaseMessage], add_messages]
 
-# Function to create an agent
+# Function to create an agent (unchanged)
 def create_agent(llm, tools, system_prompt: str = ""):
-    """Create an agent with the specified LLM, tools, and system prompt."""
     llm_with_tools = llm.bind_tools(tools)
     def chatbot(state: AgentState):
         messages = (
@@ -89,7 +91,7 @@ def create_agent(llm, tools, system_prompt: str = ""):
     graph_builder.set_entry_point("agent")
     return graph_builder.compile()
 
-# General Conversation Agent
+# General Conversation Agent (unchanged)
 general_conversation_system_prompt = """
 You are a friendly cybersecurity teaching assistant named CyberGuide. Your primary goal is to help students learn about cybersecurity concepts.
 
@@ -112,7 +114,7 @@ def general_conversation_node(state: MessagesState) -> Command[Literal["supervis
         goto="supervisor",
     )
 
-# Web Researcher Agent
+# Web Researcher Agent (unchanged)
 web_search_tool = TavilySearchResults(max_results=2)
 web_researcher_system_prompt = """
 You are an AI assistant tasked with searching the internet for information to answer the user's query about cybersecurity.
@@ -128,7 +130,7 @@ def web_research_node(state: MessagesState) -> Command[Literal["supervisor"]]:
         goto="supervisor",
     )
 
-# RAG Agent
+# Updated RAG Agent with exercise suggestion
 rag_system_prompt = """
 You are CyberGuide, an AI assistant tasked with retrieving and presenting cybersecurity educational resources from the CLARK library.
 
@@ -140,6 +142,7 @@ In your response:
 2. Clearly mention the source metadata (collection name, course name, module name)
 3. Explain cybersecurity concepts in an educational manner appropriate for students
 4. If the content is complex, provide additional explanations to make it more accessible
+5. After presenting the information, suggest to the user: "If you'd like to practice with some exercises on this topic, just let me know!"
 
 Always maintain a helpful, encouraging tone to support students in their cybersecurity learning journey.
 
@@ -154,22 +157,42 @@ def rag_node(state: MessagesState) -> Command[Literal["supervisor"]]:
         goto="supervisor",
     )
 
-# Build the graph with a simplified structure
+# New Exercise Agent
+exercise_system_prompt = """
+You are CyberGuide, an AI assistant tasked with providing cybersecurity exercises or generating questions for students.
+
+When a user asks for exercises on a topic, follow these steps:
+1. Use the exercise_retriever_tool to search for exercises in the CLARK library.
+2. If the tool returns exercises, present them to the user, including the source metadata.
+3. If the tool returns "No exercises found in the CLARK library for this topic.", generate 3-5 questions related to the topic to help the student practice.
+
+When generating questions, make them relevant to the topic and suitable for a student's learning level. You can create multiple-choice, true/false, or short answer questions.
+
+Always maintain an encouraging tone to support students in their learning.
+"""
+exercise_agent = create_agent(llm, [exercise_retriever_tool], exercise_system_prompt)
+
+def exercise_node(state: MessagesState) -> Command[Literal["supervisor"]]:
+    result = exercise_agent.invoke(state)
+    return Command(
+        update={"messages": [HumanMessage(content=result["messages"][-1].content, name="exercise")]},
+        goto="supervisor",
+    )
+
+# Build the graph with the new exercise node (unchanged from previous)
 builder = StateGraph(MessagesState)
 builder.add_edge(START, "supervisor")
 builder.add_node("supervisor", supervisor_node)
 builder.add_node("general_conversation", general_conversation_node)
 builder.add_node("web_researcher", web_research_node)
 builder.add_node("rag", rag_node)
-
-# No need for explicit edges back to supervisor - they're handled by the Command(goto="supervisor") 
-# in each agent node's function
+builder.add_node("exercise", exercise_node)
 
 # Add memory to persist conversation state
 memory = MemorySaver()
 graph = builder.compile(checkpointer=memory)
 
-# Save graph visualization to a file
+# Save graph visualization to a file (unchanged)
 try:
     graph_image = graph.get_graph().draw_mermaid_png()
     with open("graph.png", "wb") as f:
@@ -178,30 +201,35 @@ try:
 except Exception as e:
     print(f"Error saving graph: {e}")
 
-def chat_with_graph(graph, thread_id: str) -> Dict[str, str]:
+def chat_with_graph(graph, thread_id: str = None) -> Dict[str, str]:
     """
     Run an interactive chatbot session with the LangGraph workflow, handling multiple questions.
 
     Args:
         graph: The compiled LangGraph instance.
-        thread_id: A unique identifier for the conversation thread.
+        thread_id: A unique identifier for the conversation thread. If None, a new UUID is generated.
 
     Returns:
         Dict containing the final conversation state (last query, final answer, and all steps).
     """
-    # Initialize persistent state with a thread_id for the checkpointer
-    config = {"configurable": {"thread_id": thread_id}}  # Unique thread ID for this session
+    # Generate a new session ID if none provided
+    if thread_id is None:
+        thread_id = str(uuid.uuid4())  # e.g., "550e8400-e29b-41d4-a716-446655440000"
+    
+    # Initialize persistent state with the thread_id for the checkpointer
+    config = {"configurable": {"thread_id": thread_id}}
     state = {"messages": []}
     
     # Result dictionary to store conversation summary
     result_info = {
         "last_query": "",
         "final_answer": "",
-        "steps": []
+        "steps": [],
+        "session_id": thread_id  # Include session ID in the result
     }
 
-    # Print welcome message
-    print(f"{'='*50}\nWelcome to the Cybersecurity Chatbot!\nType your question or 'exit' to quit.\n{'='*50}")
+    # Print welcome message with session ID
+    print(f"{'='*50}\nWelcome to the Cybersecurity Chatbot!\nSession ID: {thread_id}\nType your question or 'exit' to quit.\n{'='*50}")
 
     while True:
         # Get user input
@@ -209,7 +237,7 @@ def chat_with_graph(graph, thread_id: str) -> Dict[str, str]:
         
         # Check for exit condition
         if query.lower() in ["exit", "quit"]:
-            print(f"{'='*50}\nChat session ended.\n{'='*50}")
+            print(f"{'='*50}\nChat session ended.\nSession ID: {thread_id}\n{'='*50}")
             break
 
         # Update state with new user message
@@ -220,7 +248,7 @@ def chat_with_graph(graph, thread_id: str) -> Dict[str, str]:
         print(f"{'='*50}\nProcessing Query: '{query}'\n{'='*50}")
 
         # Execute the graph with the current state and config
-        result = graph.invoke(state, config=config)  # Pass config with thread_id
+        result = graph.invoke(state, config=config)
         messages = result["messages"]
 
         # Process each new message since the last turn
@@ -244,7 +272,7 @@ def chat_with_graph(graph, thread_id: str) -> Dict[str, str]:
             print("-" * 50)
             result_info["steps"].append(step_info)
 
-        # Extract final answer for this turn (last agent message)
+        # Extract final answer for this turn
         final_answer = next(
             (msg.content for msg in reversed(messages) if hasattr(msg, "name") and msg.name and msg.name not in ["supervisor", None]),
             "No answer provided."
@@ -260,5 +288,6 @@ def chat_with_graph(graph, thread_id: str) -> Dict[str, str]:
     return result_info
 
 if __name__ == "__main__":
-    # Run the chat with a unique thread_id
-    result = chat_with_graph(graph, 'test_12345')
+    # Run the chat without specifying a thread_id to generate a new one
+    result = chat_with_graph(graph)
+    print(f"Session completed. Session ID was: {result['session_id']}")

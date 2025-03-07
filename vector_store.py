@@ -14,12 +14,10 @@ from pydantic import BaseModel
 load_dotenv()
 OPENAI_API_KEY = os.environ['OPENAI_API_KEY']
 
-# Function to recursively find all PDFs
 def get_all_pdfs(directory: str) -> List[str]:
     """Recursively find all PDF files in the given directory."""
     return glob.glob(f"{directory}/**/*.pdf", recursive=True)
 
-# Function to load or create the CLARK vector store
 def load_clark_vectorstore(db_path: str, base_dir: str):
     """
     Load an existing FAISS vector store from db_path or create a new one from PDFs in base_dir.
@@ -51,7 +49,6 @@ def load_clark_vectorstore(db_path: str, base_dir: str):
         documents = []
         for pdf_path in pdf_files:
             try:
-                # Extract metadata from the file path
                 parts = pdf_path.split(os.sep)
                 if len(parts) >= 4:
                     collection_name = parts[-4]
@@ -63,7 +60,6 @@ def load_clark_vectorstore(db_path: str, base_dir: str):
                     course_name = "unknown_course"
                     module_name = "unknown_module"
                     file_name = os.path.basename(pdf_path)
-
                 loader = PyPDFLoader(pdf_path)
                 pages = loader.load()
                 for page in pages:
@@ -78,7 +74,6 @@ def load_clark_vectorstore(db_path: str, base_dir: str):
                 print(f"Loaded {pdf_path} with metadata")
             except Exception as e:
                 print(f"Error loading {pdf_path}: {e}")
-
         text_splitter = RecursiveCharacterTextSplitter(chunk_size=2000, chunk_overlap=200)
         docs = text_splitter.split_documents(documents)
         embeddings = OpenAIEmbeddings()
@@ -87,14 +82,11 @@ def load_clark_vectorstore(db_path: str, base_dir: str):
         print(f"CLARK Vector DB created at {db_path} with {vectorstore.index.ntotal} documents")
     return vectorstore
 
-# Define paths
 clark_db_path = "db/clark_db/clark_library_db"
 clark_base_dir = "rag/clark_doc"
-
-# Initialize the vector store
 clark_vectorstore = load_clark_vectorstore(clark_db_path, clark_base_dir)
 
-# Define the RAG retrieval tool
+# RAG retrieval tool with docstring
 class RagToolSchema(BaseModel):
     question: str
 
@@ -113,19 +105,58 @@ def clark_retriever_tool(question: str) -> str:
     Returns:
         str: Formatted response with retrieved content and metadata.
     """
-    # print("INSIDE CLARK RETRIEVER NODE")
     retriever = clark_vectorstore.as_retriever(search_kwargs={"k": 3})
     retriever_result = retriever.invoke(question)
-
     if not retriever_result:
         return "No relevant cybersecurity information found in the CLARK library."
-
     formatted_response = []
     for doc in retriever_result:
         metadata = doc.metadata
         entry = (
             f"**Content:**\n{doc.page_content}\n\n"
             f"**Metadata:**\n"
+            f"- Collection: {metadata['collection_name']}\n"
+            f"- Course: {metadata['course_name']}\n"
+            f"- Module: {metadata['module_name']}\n"
+            f"- File: {metadata['file_name']}\n"
+            f"- Path: {metadata['file_path']}"
+        )
+        formatted_response.append(entry)
+    return "\n\n---\n\n".join(formatted_response)
+
+# Exercise retrieval tool with docstring
+class ExerciseToolSchema(BaseModel):
+    topic: str
+
+@tool(args_schema=ExerciseToolSchema)
+def exercise_retriever_tool(topic: str) -> str:
+    """
+    Retrieve cybersecurity exercises from the CLARK library based on the given topic.
+    
+    This tool searches the CLARK library for content related to exercises, such as quizzes, labs, or practice questions,
+    and returns them with metadata. If no exercises are found, it indicates so for further processing.
+    
+    Args:
+        topic (str): The cybersecurity topic for which to find exercises.
+    
+    Returns:
+        str: Formatted response with retrieved exercises and metadata, or a message if none are found.
+    """
+    retriever = clark_vectorstore.as_retriever(search_kwargs={"k": 5})
+    retriever_result = retriever.invoke(f"exercises on {topic}")
+    exercise_docs = [
+        doc for doc in retriever_result
+        if any(keyword in doc.page_content.lower() for keyword in ["exercise", "question", "quiz", "lab"])
+        or any(keyword in doc.metadata.get("file_name", "").lower() for keyword in ["exercise", "quiz", "lab"])
+    ]
+    if not exercise_docs:
+        return "No exercises found in the CLARK library for this topic."
+    formatted_response = []
+    for doc in exercise_docs:
+        metadata = doc.metadata
+        entry = (
+            f"**Exercise Content:**\n{doc.page_content}\n\n"
+            f"**Source:**\n"
             f"- Collection: {metadata['collection_name']}\n"
             f"- Course: {metadata['course_name']}\n"
             f"- Module: {metadata['module_name']}\n"

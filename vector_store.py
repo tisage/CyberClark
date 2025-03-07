@@ -113,7 +113,7 @@ def clark_retriever_tool(question: str) -> str:
     Returns:
         str: Formatted response with retrieved content and metadata.
     """
-    print("INSIDE CLARK RETRIEVER NODE")
+    # print("INSIDE CLARK RETRIEVER NODE")
     retriever = clark_vectorstore.as_retriever(search_kwargs={"k": 3})
     retriever_result = retriever.invoke(question)
 

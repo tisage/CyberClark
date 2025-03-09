@@ -28,6 +28,12 @@ assert OPENAI_API_KEY, "OPENAI_API_KEY environment variable is not set"
 # Base directory containing the CLARK library
 CLARK_BASE_DIR = "rag/clark_doc"
 
+# Pydantic model for CAE and NICE units
+class Unit(BaseModel):
+    name: str
+    description: str
+    version: str
+
 # Pydantic model for course data
 class CourseData(BaseModel):
     course_name: str
@@ -39,7 +45,8 @@ class CourseData(BaseModel):
     url_link: Optional[str] = None
     description: Optional[str] = None
     outcomes: Optional[List[str]] = None
-    alignment: Optional[List[str]] = None
+    cae_units: Optional[List[Unit]] = None
+    nice_units: Optional[List[Unit]] = None
 
 # Neo4j driver setup
 class Neo4jDriver:
@@ -115,16 +122,36 @@ class Neo4jDriver:
                         outcome=outcome,
                         course_name=course_data.course_name,
                     )
-            # Link Alignment with descriptions
-            if course_data.alignment:
-                for align in course_data.alignment:
+            # Link CAE Units
+            if course_data.cae_units:
+                for unit in course_data.cae_units:
                     session.run(
                         """
-                        MERGE (a:Alignment {name: $align})
-                        MERGE (c:Course {name: $course_name})
-                        MERGE (c)-[:ALIGNS_WITH]->(a)
+                        MERGE (u:CAEUnit {name: $name, version: $version})
+                        SET u.description = $description
+                        WITH u
+                        MATCH (c:Course {name: $course_name})
+                        MERGE (c)-[:ALIGNS_WITH]->(u)
                         """,
-                        align=align,
+                        name=unit.name,
+                        description=unit.description,
+                        version=unit.version,
+                        course_name=course_data.course_name,
+                    )
+            # Link NICE Units
+            if course_data.nice_units:
+                for unit in course_data.nice_units:
+                    session.run(
+                        """
+                        MERGE (u:NICEUnit {name: $name, version: $version})
+                        SET u.description = $description
+                        WITH u
+                        MATCH (c:Course {name: $course_name})
+                        MERGE (c)-[:ALIGNS_WITH]->(u)
+                        """,
+                        name=unit.name,
+                        description=unit.description,
+                        version=unit.version,
                         course_name=course_data.course_name,
                     )
 
@@ -158,7 +185,7 @@ def extract_data_from_readme(pdf_path: str) -> CourseData:
         collection_name = "unknown_collection"
         course_name = "unknown_course"
 
-    # Refined LLM prompt
+    # Updated LLM prompt
     prompt = f"""
     You are an expert data extractor. From the following README text, extract these fields into a valid JSON object:
     - course_name (string)
@@ -170,15 +197,31 @@ def extract_data_from_readme(pdf_path: str) -> CourseData:
     - url_link (string or null)
     - description (string or null)
     - outcomes (list of strings)
-    - alignment (list of strings, include full text of each alignment item across pages)
+    - cae_units (list of objects with name, description, version)
+    - nice_units (list of objects with name, description, version)
 
     Rules:
     - Return ONLY a valid JSON string, no additional text or explanations.
     - Use null for missing single-value fields (e.g., updated_time).
     - Use empty lists for missing list fields (e.g., contributors).
     - For description, concatenate paragraphs into a single string.
-    - For outcomes and alignment, list each item separately; combine alignment items across pages into a single list.
-    - Ignore page numbers (e.g., "1 CLARK", "2 CLARK") in alignment.
+    - For outcomes, list each outcome separately.
+    - For cae_units and nice_units, extract from alignment or relevant sections:
+      - CAE units start with patterns like "CAE Cyber Defense (version)" or "CAE CDE (version)" followed by "- name: description".
+      - NICE units start with "NICE Components vX.X.X (year)" followed by "- name: description".
+      - Extract name, description, and version for each unit.
+      - If the description spans multiple lines, include the entire description.
+      - Ignore page numbers like "1 CLARK", "2 CLARK".
+    - If no CAE or NICE units are found, return empty lists.
+
+    Example:
+    If the text contains:
+    "Alignment:
+    CAE Cyber Defense (2014) - Databases: Students will be able to apply security principles to the design and development of database systems and database structures
+    NICE Components v1.0.0 (2024) - K0707: Knowledge of database systems and software"
+    Then:
+    "cae_units": [{{"name": "Databases", "description": "Students will be able to apply security principles to the design and development of database systems and database structures", "version": "2014"}}],
+    "nice_units": [{{"name": "K0707", "description": "Knowledge of database systems and software", "version": "2024"}}]
 
     Text:
     {text}
@@ -202,7 +245,8 @@ def extract_data_from_readme(pdf_path: str) -> CourseData:
             "url_link": None,
             "description": None,
             "outcomes": [],
-            "alignment": [],
+            "cae_units": [],
+            "nice_units": [],
         }
 
     # Ensure all fields are present
@@ -216,7 +260,8 @@ def extract_data_from_readme(pdf_path: str) -> CourseData:
         "url_link": extracted_data.get("url_link"),
         "description": extracted_data.get("description"),
         "outcomes": extracted_data.get("outcomes", []) or [],
-        "alignment": extracted_data.get("alignment", []) or [],
+        "cae_units": extracted_data.get("cae_units", []) or [],
+        "nice_units": extracted_data.get("nice_units", []) or [],
     }
 
     return CourseData(**data)
@@ -240,6 +285,7 @@ def load_readme_files_into_neo4j(base_dir: str, neo4j_driver: Neo4jDriver):
 def main():
     neo4j_driver = Neo4jDriver(NEO4J_URI, NEO4J_USERNAME, NEO4J_PASSWORD)
     load_readme_files_into_neo4j(CLARK_BASE_DIR, neo4j_driver)
+    print("Complete. Check Neo4j for the results.")
     neo4j_driver.close()
 
 if __name__ == "__main__":

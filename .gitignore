@@ -8,8 +8,7 @@ __pycache__
 .benchmarks
 .obsidian
 rag
-wandb
-tianyuelite
+log
 
 # Ignore key files
 .env

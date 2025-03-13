@@ -16,12 +16,13 @@ pip install python-dotenv langchain langchain_community langgraph langchain-open
 
 Not Mount Local Folder
 ```bash
-docker run --name neo4j -p 7474:7474 -p 7687:7687 -d -e NEO4J_AUTH=neo4j/password -e NEO4J_PLUGINS='["apoc"]'  neo4j:latest
+docker run --name neo4j -p 7474:7474 -p 7687:7687 -d -e NEO4J_AUTH=neo4j/password -e NEO4J_PLUGINS='["apoc"]' -e apoc.export.file.enabled=true neo4j:latest
 ```
 
-Windows OS Mount Local Folder (Documents\Notebooks\CyberClark\db\neo4j)
+Windows OS Mount Local Folder (Documents\Notebooks\neo4j)
 ```bash
-docker run --name neo4j -p 7474:7474 -p 7687:7687 -d -e NEO4J_AUTH=neo4j/password -e NEO4J_PLUGINS='["apoc"]' -e apoc.export.file.enabled=true -v $HOME\Documents\Notebooks\CyberClark\db\neo4j:/data neo4j:latest```
+docker run --name neo4j -p 7474:7474 -p 7687:7687 -d -e NEO4J_AUTH=neo4j/password -e NEO4J_PLUGINS='["apoc"]' -e apoc.export.file.enabled=true -v $HOME\Documents\Notebooks\neo4j:/data neo4j:latest
+```
 
 
 ## Run App

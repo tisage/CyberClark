@@ -24,6 +24,11 @@ Windows OS Mount Local Folder (Documents\Notebooks\neo4j)
 docker run --name neo4j -p 7474:7474 -p 7687:7687 -d -e NEO4J_AUTH=neo4j/password -e NEO4J_PLUGINS='["apoc"]' -e apoc.export.file.enabled=true -v $HOME\Documents\Notebooks\neo4j:/data neo4j:latest
 ```
 
+Mac/Linux OS Mount Local Folder (~/Notebooks/neo4j)
+```bash
+docker run --name neo4j -p 7474:7474 -p 7687:7687 -d -e NEO4J_AUTH=neo4j/password -e NEO4J_PLUGINS='["apoc"]' -e apoc.export.file.enabled=true -v ~/Notebooks/neo4j:/data neo4j:latest
+```
+
 
 ## Run App
 ```bash

@@ -17,8 +17,8 @@ from typing_extensions import TypedDict
 from vector_store import clark_retriever_tool, exercise_retriever_tool
 
 load_dotenv()
-OPENAI_API_KEY = os.environ['OPENAI_API_KEY']
-TAVILY_API_KEY = os.environ['TAVILY_API_KEY']
+OPENAI_API_KEY = os.environ.get('OPENAI_API_KEY', '')
+TAVILY_API_KEY = os.environ.get('TAVILY_API_KEY', '')
 
 # Initialize LLM
 llm = ChatOpenAI(model_name="gpt-4o-mini", temperature=0.8)
@@ -190,7 +190,7 @@ def exercise_node(state: MessagesState) -> Command[Literal["supervisor"]]:
     )
 
 # Build and compile the graph
-def build_graph():
+def build_graph(generate_graph_image=False):
     builder = StateGraph(MessagesState)
     builder.add_edge(START, "supervisor")
     builder.add_node("supervisor", supervisor_node)
@@ -204,12 +204,13 @@ def build_graph():
     graph = builder.compile(checkpointer=memory)
 
     # Save graph visualization (optional, can be commented out if not needed)
-    try:
-        graph_image = graph.get_graph().draw_mermaid_png()
-        with open("graph.png", "wb") as f:
-            f.write(graph_image)
-        print("Graph saved as 'graph.png' in the current directory.")
-    except Exception as e:
-        print(f"Error saving graph: {e}")
+    if generate_graph_image:
+        try:
+            graph_image = graph.get_graph().draw_mermaid_png()
+            with open("graph.png", "wb") as f:
+                f.write(graph_image)
+            print("Graph saved as 'graph.png' in the current directory.")
+        except Exception as e:
+            print(f"Error saving graph: {e}")
 
     return graph

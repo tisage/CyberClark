@@ -4,6 +4,7 @@ from agents import build_graph, OPENAI_API_KEY, TAVILY_API_KEY
 import uuid
 from langchain_core.messages import HumanMessage
 import re
+import sys
 
 # Set page config
 st.set_page_config(
@@ -71,6 +72,13 @@ def format_message(message):
     
     return message
 
+# Debug print function that outputs to terminal
+def debug_print(message, separator="-"):
+    print(message)
+    if separator:
+        print(separator * 50)
+    sys.stdout.flush()  # Ensure output is flushed immediately
+
 # Capture user query
 query = st.chat_input("Type your question here (e.g., 'What is risk management?')")
 
@@ -80,13 +88,38 @@ if query:
         # Add query to conversation with placeholder
         st.session_state.conversation.append({'user': query, 'bot': 'Thinking...'})
         
+        # Debug header
+        debug_print(f"{'='*50}\nProcessing Query: '{query}'\nSession ID: {st.session_state.thread_id}\n{'='*50}")
+        
         # Process the query with the graph
         user_message = HumanMessage(content=query)
+        state = {"messages": [user_message]}
         config = {"configurable": {"thread_id": st.session_state.thread_id}}
-        result = graph.invoke({"messages": [user_message]}, config=config)
         
-        # Extract the AI's response
+        # Track previous message count to identify new messages
+        prev_msg_count = 1  # Starting with 1 user message
+        
+        result = graph.invoke(state, config=config)
+        
+        # Extract and display debug info for each step
         messages = result["messages"]
+        
+        for i, msg in enumerate(messages[prev_msg_count:], start=prev_msg_count):
+            sender = msg.name if hasattr(msg, "name") and msg.name else ("User" if isinstance(msg, HumanMessage) else "Unknown")
+            
+            if sender == "supervisor":
+                step_info = f"Supervisor: Routing decision based on prior message"
+            elif hasattr(msg, "tool_calls") and msg.tool_calls:
+                tool_name = msg.tool_calls[0]["name"] if msg.tool_calls else "Unknown Tool"
+                step_info = f"Agent: {sender}\nTool: {tool_name}\nOutput: {msg.content}"
+            elif sender not in ["User", "supervisor"]:
+                step_info = f"Agent: {sender}\nOutput: {msg.content}"
+            else:
+                step_info = f"{sender}: {msg.content}"
+                
+            debug_print(step_info)
+        
+        # Extract the final answer
         final_answer = next(
             (msg.content for msg in reversed(messages) if hasattr(msg, "name") and msg.name and msg.name not in ["supervisor", None]),
             "No answer provided."
@@ -94,6 +127,9 @@ if query:
         
         # Format the response
         formatted_answer = format_message(final_answer)
+        
+        # Debug print the final answer
+        debug_print(f"{'='*50}\nFinal Answer to User:\n{'-'*20}\n{final_answer}\n{'='*50}")
         
         # Update the conversation with the actual response
         st.session_state.conversation[-1]['bot'] = formatted_answer
@@ -110,4 +146,5 @@ if st.session_state.conversation:
     if st.button("Clear Chat"):
         st.session_state.conversation = []
         st.session_state.thread_id = str(uuid.uuid4())
+        debug_print(f"{'='*50}\nChat session cleared. New session ID: {st.session_state.thread_id}\n{'='*50}")
         st.rerun()

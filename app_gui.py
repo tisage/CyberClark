@@ -1,10 +1,12 @@
-import streamlit as st
 import os
-from agents import build_graph, OPENAI_API_KEY, TAVILY_API_KEY
-import uuid
-from langchain_core.messages import HumanMessage
 import re
 import sys
+import uuid
+
+import streamlit as st
+from langchain_core.messages import HumanMessage
+
+from agents import OPENAI_API_KEY, TAVILY_API_KEY, build_graph
 
 # Set page config
 st.set_page_config(

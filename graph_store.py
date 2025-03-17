@@ -1,13 +1,14 @@
 import glob
+import json
+import logging
 import os
 from typing import List, Optional
+
 from dotenv import load_dotenv
 from langchain_community.document_loaders import PyPDFLoader
 from langchain_openai import ChatOpenAI
 from neo4j import GraphDatabase
 from pydantic import BaseModel
-import json
-import logging
 
 # Set up logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')

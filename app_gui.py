@@ -30,20 +30,6 @@ with st.sidebar:
     
     st.code(f"OpenAI API: {openai_status}\nTavily API: {tavily_status}")
     
-    # About section
-    st.subheader("About CyberClark")
-    st.markdown("""
-    CyberClark is an intelligent chatbot designed for cybersecurity education. 
-    It leverages multiple specialized agents:
-    
-    - **General Conversation**: Handles greetings and small talk
-    - **RAG Agent**: Searches through the CLARK library
-    - **Web Researcher**: Finds information on the internet
-    - **Exercise Agent**: Provides practice questions and quizzes
-    
-    Ask anything about cybersecurity concepts, best practices, or request exercises!
-    """)
-
 # Build the graph once (not on every query)
 @st.cache_resource
 def get_graph():
@@ -59,7 +45,21 @@ if 'conversation' not in st.session_state:
 
 # Set up the app
 st.title("CyberClark: Cybersecurity Education Chatbot")
-st.markdown("Ask me anything about cybersecurity, from general topics to exercises!")
+# st.markdown("Ask me anything about cybersecurity, from general topics to exercises!")
+# About section moved from sidebar to main interface
+st.markdown("""
+### About CyberClark
+
+CyberClark is an intelligent chatbot designed for cybersecurity education. 
+It leverages multiple specialized agents:
+
+- 🤖 **General Conversation**: Handles greetings and small talk
+- 📚 **RAG Agent**: Searches through the CLARK library
+- 🔍 **Web Researcher**: Finds information on the internet
+- 🧩 **Exercise Agent**: Provides practice questions and quizzes
+
+Ask anything about cybersecurity concepts, best practices, or request exercises!
+""")
 
 # Format the response with proper markdown
 def format_message(message):

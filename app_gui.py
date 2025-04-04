@@ -6,14 +6,15 @@ import uuid
 import streamlit as st
 from langchain_core.messages import HumanMessage
 
-from agents import OPENAI_API_KEY, TAVILY_API_KEY, build_graph
-
-# Set page config
+# Set page config must be the first Streamlit command
 st.set_page_config(
     page_title="CyberClark: Cybersecurity Education Chatbot",
     page_icon="🔐",
     layout="wide"
 )
+
+# Now import the custom modules after setting page config
+from agents import OPENAI_API_KEY, TAVILY_API_KEY, build_graph
 
 # Sidebar configuration
 with st.sidebar:
@@ -35,9 +36,9 @@ with st.sidebar:
 def get_graph():
     return build_graph(generate_graph_image=False)
 
-graph = get_graph()
-
 # Initialize session state
+if 'graph' not in st.session_state:
+    st.session_state.graph = get_graph()
 if 'thread_id' not in st.session_state:
     st.session_state.thread_id = str(uuid.uuid4())
 if 'conversation' not in st.session_state:
@@ -101,7 +102,8 @@ if query:
         # Track previous message count to identify new messages
         prev_msg_count = 1  # Starting with 1 user message
         
-        result = graph.invoke(state, config=config)
+        # Use the cached graph from session state
+        result = st.session_state.graph.invoke(state, config=config)
         
         # Extract and display debug info for each step
         messages = result["messages"]

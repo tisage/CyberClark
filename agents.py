@@ -1,4 +1,3 @@
-# agents.py
 import os
 from typing import Annotated, Dict, Literal, Sequence
 
@@ -14,6 +13,7 @@ from langgraph.types import Command
 from pydantic import BaseModel
 from typing_extensions import TypedDict
 
+# Import the vector store tools
 from vector_store import clark_retriever_tool, exercise_retriever_tool
 
 load_dotenv()

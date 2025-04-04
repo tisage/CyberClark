@@ -4,6 +4,7 @@ import logging
 import os
 from typing import List
 
+import streamlit as st
 from dotenv import load_dotenv
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain.tools import tool
@@ -15,7 +16,7 @@ from pydantic import BaseModel
 
 # Load environment variables
 load_dotenv()
-OPENAI_API_KEY = os.environ['OPENAI_API_KEY']
+OPENAI_API_KEY = os.environ.get('OPENAI_API_KEY', '')
 
 # Create log directory if it doesn't exist
 log_dir = 'log'
@@ -34,9 +35,11 @@ def get_all_pdfs(directory: str) -> List[str]:
     """Recursively find all PDF files in the given directory."""
     return glob.glob(f"{directory}/**/*.pdf", recursive=True)
 
+@st.cache_resource
 def load_clark_vectorstore(db_path: str, base_dir: str):
     """
     Load an existing FAISS vector store from db_path or create a new one from PDFs in base_dir.
+    Cached with st.cache_resource to prevent reloading on each Streamlit interaction.
     
     Args:
         db_path (str): Path to the vector store database.
@@ -137,10 +140,18 @@ def load_clark_vectorstore(db_path: str, base_dir: str):
     
     return vectorstore
 
-# Main execution
+# Main execution - now cached
 clark_db_path = "db/clark_db/clark_library_db"
 clark_base_dir = "rag/clark_doc"
-clark_vectorstore = load_clark_vectorstore(clark_db_path, clark_base_dir)
+
+# Use the cached function to load the vectorstore
+@st.cache_resource
+def get_clark_vectorstore():
+    """Cached function to get the CLARK vectorstore."""
+    return load_clark_vectorstore(clark_db_path, clark_base_dir)
+
+# This will now be cached and only execute once per session
+clark_vectorstore = get_clark_vectorstore()
 
 # RAG retrieval tool
 class RagToolSchema(BaseModel):
@@ -157,7 +168,9 @@ def clark_retriever_tool(question: str) -> str:
     Returns:
         str: Formatted response with retrieved content and metadata.
     """
-    retriever = clark_vectorstore.as_retriever(search_kwargs={"k": 3})
+    # Get the cached vectorstore
+    vectorstore = get_clark_vectorstore()
+    retriever = vectorstore.as_retriever(search_kwargs={"k": 3})
     retriever_result = retriever.invoke(question)
     if not retriever_result:
         return "No relevant cybersecurity information found in the CLARK library."
@@ -191,7 +204,9 @@ def exercise_retriever_tool(topic: str) -> str:
     Returns:
         str: Formatted response with retrieved exercises and metadata, or a message if none are found.
     """
-    retriever = clark_vectorstore.as_retriever(search_kwargs={"k": 7})
+    # Get the cached vectorstore
+    vectorstore = get_clark_vectorstore()
+    retriever = vectorstore.as_retriever(search_kwargs={"k": 7})
     
     search_queries = [
         f"quiz on {topic}",

@@ -1,0 +1,60 @@
+flowchart TB
+    %% Main components with better positioning
+    User([User/Student]) --> |"Asks query"| UI[Streamlit UI Interface]
+    UI --> |"Submits query"| Graph
+    
+    %% Graph components
+    subgraph Graph["LangGraph Workflow"]
+        direction TB
+        Start([Start]) --> Supervisor{Supervisor Router}
+        
+        %% Agents
+        Supervisor --> |"Small talk/Greetings"| GA[General Conversation Agent]
+        Supervisor --> |"Cybersecurity questions"| RA[RAG Agent]
+        Supervisor --> |"Need external information"| WA[Web Researcher Agent]
+        Supervisor --> |"Request for exercises"| EA[Exercise Agent]
+        
+        %% Tools connected to agents
+        RA -.-> |"Uses"| RT[CLARK Retriever Tool]
+        WA -.-> |"Uses"| WT[Tavily Search Tool]
+        EA -.-> |"Uses"| ET[Exercise Retriever Tool]
+        
+        %% CLARK resources
+        RT -.-> |"Queries"| VS[(FAISS Vector Store)]
+        ET -.-> |"Queries"| VS
+        VS -.-> |"Stores"| CLARK[CLARK Library PDFs]
+        
+        %% Return paths
+        GA --> Supervisor
+        RA --> Supervisor
+        WA --> Supervisor
+        EA --> Supervisor
+        
+        Supervisor --> |"FINISH"| End([End])
+    end
+    
+    %% External resources
+    CLARK -.-> |"Indexed Content"| PDFs[(PDF Files:\nSlides, Notes, Labs, Quizzes)]
+    WT -.-> |"Searches"| Web[(Internet)]
+    
+    %% Response path
+    Graph --> |"Returns response"| UI
+    UI --> |"Displays response"| User
+    
+    %% Styling - Professional with colors that work well on white background
+    classDef agent fill:#d4e6f1,stroke:#2874a6,stroke-width:1px
+    classDef tool fill:#d1f2eb,stroke:#148f77,stroke-width:1px
+    classDef storage fill:#f9e79f,stroke:#d4ac0d,stroke-width:1px
+    classDef external fill:#fadbd8,stroke:#cb4335,stroke-width:1px
+    classDef interface fill:#e8f8f5,stroke:#117a65,stroke-width:1px
+    classDef router fill:#d5f5e3,stroke:#239b56,stroke-width:1px
+    classDef endpoint fill:#f4f6f6,stroke:#566573,stroke-width:1px,stroke-dasharray: 3 3
+    
+    class GA,RA,WA,EA agent
+    class RT,WT,ET tool
+    class VS,PDFs storage
+    class Web external
+    class UI interface
+    class CLARK external
+    class Supervisor router
+    class Start,End endpoint

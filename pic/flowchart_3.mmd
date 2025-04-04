@@ -1,0 +1,59 @@
+---
+config:
+  layout: fixed
+---
+flowchart TB
+ subgraph Graph["LangGraph Workflow"]
+    direction TB
+        Supervisor{"Supervisor Router"}
+        Start(["Start"])
+        GA["General Conversation Agent"]
+        RA["RAG Agent"]
+        WA["Web Researcher Agent"]
+        EA["Exercise Agent"]
+        RT["CLARK Retriever Tool"]
+        WT["Tavily Search Tool"]
+        ET["Exercise Retriever Tool"]
+        VS[("FAISS Vector Store")]
+        CLARK["CLARK Library PDFs"]
+        End(["End"])
+  end
+    Start --> Supervisor
+    Supervisor -- Small talk/Greetings --> GA
+    Supervisor -- Cybersecurity questions --> RA
+    Supervisor -- Need external information --> WA
+    Supervisor -- Request for exercises --> EA
+    RA -. Uses .-> RT
+    WA -. Uses .-> WT
+    EA -. Uses .-> ET
+    RT -. Queries .-> VS
+    ET -. Queries .-> VS
+    VS -. Stores .-> CLARK
+    GA --> Supervisor
+    RA --> Supervisor
+    WA --> Supervisor
+    EA --> Supervisor
+    Supervisor -- FINISH --> End
+    CLARK -. Indexed Content .-> PDFs[("PDF Files: Slides, Notes, Labs, Quizzes, etc.")]
+    WT -. Searches .-> Web[("Internet")]
+     Supervisor:::router
+     Start:::endpoint
+     GA:::agent
+     RA:::agent
+     WA:::agent
+     EA:::agent
+     RT:::tool
+     WT:::tool
+     ET:::tool
+     VS:::storage
+     CLARK:::external
+     End:::endpoint
+     PDFs:::storage
+     Web:::external
+    classDef agent fill:#d4e6f1,stroke:#2874a6,stroke-width:1px
+    classDef tool fill:#d1f2eb,stroke:#148f77,stroke-width:1px
+    classDef storage fill:#f9e79f,stroke:#d4ac0d,stroke-width:1px
+    classDef external fill:#fadbd8,stroke:#cb4335,stroke-width:1px
+    classDef interface fill:#e8f8f5,stroke:#117a65,stroke-width:1px
+    classDef router fill:#d5f5e3,stroke:#239b56,stroke-width:1px
+    classDef endpoint fill:#f4f6f6,stroke:#566573,stroke-width:1px,stroke-dasharray: 3 3

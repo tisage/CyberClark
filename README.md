@@ -118,9 +118,9 @@ This project is licensed under the MIT License - see the LICENSE file for detail
 
 ## 📄 Publications
 This project is related to the following research publications:
-- **[FORTHCOMING] Agentic Workflows for Cybersecurity Education: A Multi-Agent Learning Framework**  
+- **Agentic Workflows for Cybersecurity Education: A Multi-Agent Learning Framework**  
   Tianyu Wang, Nianjun Zhou, Zhixiong Chen  
-  *To be presented at the 2025 CAE in Cybersecurity Symposium – Charleston, South Carolina*
+  *Presented at the 2025 CAE in Cybersecurity Symposium (CAE-CD Track) – Charleston, South Carolina*
 
 ## 🙏 Acknowledgements
 
